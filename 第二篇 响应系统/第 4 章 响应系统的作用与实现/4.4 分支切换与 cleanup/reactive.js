@@ -1,12 +1,36 @@
 let activeEffect
 
+export function effect(fn) {
+  const effectFn=()=>{
+    console.log('调用');
+    cleanup(effectFn)
+    // 当 effectFn 执行时，将其设置为当前激活的副作用函数
+    activeEffect=effectFn
+    fn()
+  }
+
+  // activeEffect.deps 用来存储所有与该副作用函数相关联的依赖集合
+  effectFn.deps=[]
+  // 执行副作用函数
+  effectFn()
+}
+
+function cleanup(effectFn){
+  for(let i=0;i<effectFn.deps.length;i++){
+    const deps=effectFn.deps[i]
+    deps?.delete(effectFn)
+  }
+
+  effectFn.deps.length=0
+}
+
 // 存储副作用函数的桶
 const bucket = new WeakMap()
 
 // 原始数据
 const data = {
-  text: 'hello world',
-  str: 'str',
+  bool:true,
+  str:'obj str'
 }
 
 const track = (target, key) => {
@@ -21,8 +45,11 @@ const track = (target, key) => {
   let deps = depsMap.get('key')
   // 如果 deps 不存在，同样新建一个 Set 并与 key 关联
   if (!deps) depsMap.set(key, (deps = new Set()))
-  // 最后将当前激活的副作用函数添加到“桶”里
+  // 将当前激活的副作用函数添加到“桶”里
   deps.add(activeEffect)
+  // 将其添加到 activeEffect.deps 数组中
+  activeEffect.deps.push(deps) // 新增
+  console.log('activeEffect',[...activeEffect.deps]);
 }
 
 const trigger = (target, key) => {
@@ -32,14 +59,15 @@ const trigger = (target, key) => {
   // 根据 key 取得所有副作用函数 effects
   const effects = depsMap.get(key)
   // 执行副作用函数
-  effects?.forEach?.((fn) => fn())
+  const effectsToRun = new Set(effects)
+  effectsToRun.forEach(effectFn => effectFn())
 }
 
 // 对原始数据的代理
 export const obj = new Proxy(data, {
   // 拦截读取操作
   get(target, key) {
-    console.log({ target, key })
+    console.log('get',{ target, key })
 
     track(target, key)
 
@@ -47,6 +75,7 @@ export const obj = new Proxy(data, {
   },
   // 拦截设置操作
   set(target, key, newVal) {
+    console.log('set',{ target, key })
     // 设置属性值
     target[key] = newVal
 
@@ -55,10 +84,3 @@ export const obj = new Proxy(data, {
     return true
   },
 })
-
-export function effect(fn) {
-  // 当调用 effect 注册副作用函数时，将副作用函数 fn 赋值给activeEffect
-  activeEffect = fn
-  // 执行副作用函数
-  fn()
-}
