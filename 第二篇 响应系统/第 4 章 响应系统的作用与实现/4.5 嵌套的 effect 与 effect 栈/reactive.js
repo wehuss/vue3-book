@@ -1,5 +1,7 @@
 let activeEffect
 
+const effectStack=[]
+
 export function effect(fn) {
   const effectFn=()=>{
     console.log('调用');
@@ -7,7 +9,12 @@ export function effect(fn) {
     cleanup(effectFn)
     // 当 effectFn 执行时，将其设置为当前激活的副作用函数
     activeEffect=effectFn
+    // 在调用副作用函数之前将当前副作用函数压入栈中
+    effectStack.push(effectFn)
     fn()
+    // 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并把activeEffect 还原为之前的值
+    effectStack.pop()
+    activeEffect = effectStack[effectStack.length - 1]
   }
 
   // activeEffect.deps 用来存储所有与该副作用函数相关联的依赖集合
@@ -60,7 +67,11 @@ const trigger = (target, key) => {
   // 根据 key 取得所有副作用函数 effects
   const effects = depsMap.get(key)
   // 执行副作用函数
-  const effectsToRun = new Set(effects)
+  const effectsToRun = new Set()
+  effects.forEach(effectFn=>{
+    // 如果 trigger 触发执行的副作用函数与当前正在执行的副作用函数相同，则不触发执行，否则会导致无限递归！
+    if(effectFn!==activeEffect) effectsToRun.add(effectFn)
+  })
   effectsToRun.forEach(effectFn => effectFn())
 }
 
